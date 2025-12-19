@@ -1,3 +1,4 @@
+
 INSERT INTO users (username, password, role) VALUES
 ('admin', ''' OR ''1''=''1', 'admin'),
 ('user1', '" OR "1"="1', 'user'),
@@ -23,4 +24,3 @@ INSERT INTO flags (flag_value) VALUES
 ('FLAG{SQLI_UNION_SELECT}'),
 ('FLAG{SQLI_UNION_ENUM}'),
 ('FLAG{SQLI_FINGERPRINTING}');
-
