@@ -1,6 +1,8 @@
 
 # 🧨 SQLWiz – Vulnerable SQL Injection Lab
 
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/a71b6b3e-3a9e-4551-bb6f-c7974479e5c0" />
+
 SQLWiz is an **intentionally vulnerable SQL Injection lab** built with **Node.js + MariaDB**, designed for **CTFs, pentesting practice, and learning SQLi exploitation**.
 
 > ⚠️ WARNING  
