@@ -30,7 +30,8 @@ SQLWiz is an **intentionally vulnerable SQL Injection lab** built with **Node.js
 ## 🚀 Run the Lab
 
 ```bash
-# Using Podman
+# Using Podmangit clone https://github.com/alhamrizvi-cloud/SQLwiz.git
+cd SQLwiz
 podman-compose up --build
 
 # Using Docker
