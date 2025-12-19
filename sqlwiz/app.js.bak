@@ -1,0 +1,249 @@
+const express = require('express');
+const mysql = require('mysql');
+const bodyParser = require('body-parser');
+const session = require('express-session');
+
+const db = mysql.createConnection({
+    host: process.env.DB_HOST || 'localhost',  // Use DB_HOST env var, default to localhost for local dev
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASS || '',
+    database: process.env.DB_NAME || 'vulnerable_ecommerce'
+});
+
+const app = express();
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({ secret: 'secret', resave: false, saveUninitialized: true }));
+
+const db = mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: '', // Update with your MySQL password
+    database: 'vulnerable_ecommerce'
+});
+
+db.connect((err) => {
+    if (err) throw err;
+    console.log('Connected to MySQL');
+});
+
+// Middleware to check login
+function requireLogin(req, res, next) {
+    if (req.session.user) next();
+    else res.redirect('/login');
+}
+
+// Routes
+
+// Login page
+app.get('/login', (req, res) => {
+    res.send(`
+        <html>
+        <body>
+        <h1>Login</h1>
+        <form action="/login" method="POST">
+            Username: <input name="username"><br>
+            Password: <input name="password"><br>
+            <button type="submit">Login</button>
+        </form>
+        </body>
+        </html>
+    `);
+});
+
+// Vulnerable login (parameters: login_username, login_password)
+app.post('/login', (req, res) => {
+    const username = req.body.username;
+    const password = req.body.password;
+    // Vulnerable: Direct concatenation
+    const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
+    db.query(query, (err, results) => {
+        if (err) throw err;
+        if (results.length > 0) {
+            req.session.user = results[0];
+            res.redirect('/dashboard');
+        } else {
+            res.send('Invalid login');
+        }
+    });
+});
+
+// Dashboard
+app.get('/dashboard', requireLogin, (req, res) => {
+    const user = req.session.user;
+    let content = `<h1>Welcome ${user.username}</h1>`;
+    if (user.role === 'admin') {
+        content += `<h2>Admin Dashboard</h2><p>Flag: FLAG{SQLI_AUTH_BYPASS}</p>`; // Flag 1: Retrieved by bypassing auth via SQLi
+    }
+    content += `<a href="/products">Products</a> | <a href="/orders">Orders</a>`;
+    res.send(content);
+});
+
+// Product search (parameter: search_query)
+app.get('/products', requireLogin, (req, res) => {
+    const query = req.query.q || '';
+    // Vulnerable: LIKE with concatenation
+    const sql = `SELECT * FROM products WHERE name LIKE '%${query}%'`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        let html = '<h1>Products</h1><form><input name="q"><button>Search</button></form><ul>';
+        results.forEach(p => html += `<li>${p.name} - ${p.description}</li>`);
+        html += '</ul>';
+        res.send(html);
+    });
+});
+
+// Product details (parameter: product_id)
+app.get('/product/:id', requireLogin, (req, res) => {
+    const id = req.params.id;
+    // Vulnerable: Numeric injection
+    const sql = `SELECT * FROM products WHERE id = ${id}`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        const p = results[0];
+        res.send(`<h1>${p.name}</h1><p>${p.description}</p><p>Price: ${p.price}</p>`);
+    });
+});
+
+// Category filter (parameter: category)
+app.get('/categories', requireLogin, (req, res) => {
+    const category = req.query.cat || '';
+    // Vulnerable: String injection
+    const sql = `SELECT * FROM products WHERE category = '${category}'`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        let html = '<h1>Categories</h1><form><input name="cat"><button>Filter</button></form><ul>';
+        results.forEach(p => html += `<li>${p.name}</li>`);
+        html += '</ul>';
+        res.send(html);
+    });
+});
+
+// Sort order (parameter: sort_order)
+app.get('/sort', requireLogin, (req, res) => {
+    const sort = req.query.sort || 'id';
+    // Vulnerable: ORDER BY injection
+    const sql = `SELECT * FROM products ORDER BY ${sort}`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        let html = '<h1>Sorted Products</h1><ul>';
+        results.forEach(p => html += `<li>${p.name}</li>`);
+        html += '</ul>';
+        res.send(html);
+    });
+});
+
+// Group filter (parameter: group_filter)
+app.get('/group', requireLogin, (req, res) => {
+    const group = req.query.group || 'category';
+    // Vulnerable: GROUP BY injection
+    const sql = `SELECT category, COUNT(*) FROM products GROUP BY ${group}`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        let html = '<h1>Grouped</h1><ul>';
+        results.forEach(r => html += `<li>${r.category}: ${r['COUNT(*)']}</li>`);
+        html += '</ul>';
+        res.send(html);
+    });
+});
+
+// Order history (parameter: user_id)
+app.get('/orders', requireLogin, (req, res) => {
+    const userId = req.session.user.id;
+    // Vulnerable: Numeric injection (but using session for simplicity, but to make vulnerable, perhaps allow param)
+    // For CTF, make it vulnerable via query param
+    const uid = req.query.uid || userId;
+    const sql = `SELECT * FROM orders WHERE user_id = ${uid}`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        let html = '<h1>Orders</h1><ul>';
+        results.forEach(o => html += `<li>Order ${o.id}</li>`);
+        html += '</ul>';
+        res.send(html);
+    });
+});
+
+// Admin user lookup (parameter: admin_user_lookup)
+app.get('/admin/users', requireLogin, (req, res) => {
+    if (req.session.user.role !== 'admin') return res.send('Access denied');
+    const username = req.query.username || '';
+    // Vulnerable: String injection
+    const sql = `SELECT * FROM users WHERE username = '${username}'`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        let html = '<h1>Users</h1><ul>';
+        results.forEach(u => html += `<li>${u.username}</li>`);
+        html += '</ul>';
+        res.send(html);
+    });
+});
+
+// Version check (parameter: version_check)
+app.get('/version', requireLogin, (req, res) => {
+    const input = req.query.input || '';
+    // Vulnerable: Raw select
+    const sql = `SELECT '${input}'`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        res.send(`Version: ${results[0][Object.keys(results[0])[0]]}`);
+    });
+});
+
+// Time test (parameter: time_test)
+app.get('/time', requireLogin, (req, res) => {
+    const input = req.query.input || '1';
+    // Vulnerable: Time-based
+    const sql = `SELECT * FROM products WHERE id = '${input}'`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        res.send('Query executed');
+    });
+});
+
+// Review comment (parameter: review_comment) - Assuming a reviews table, but for simplicity, insert into products or something. Wait, no reviews table, so skip or add.
+app.post('/review', requireLogin, (req, res) => {
+    const comment = req.body.comment;
+    // Vulnerable: INSERT
+    const sql = `INSERT INTO products (description) VALUES ('${comment}')`; // Hacky, but for demo
+    db.query(sql, (err) => {
+        if (err) throw err;
+        res.send('Review added');
+    });
+});
+
+// Price filter (parameter: price_filter)
+app.get('/price', requireLogin, (req, res) => {
+    const price = req.query.price || 0;
+    // Vulnerable: Numeric
+    const sql = `SELECT * FROM products WHERE price > ${price}`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        let html = '<h1>Price Filter</h1><ul>';
+        results.forEach(p => html += `<li>${p.name}</li>`);
+        html += '</ul>';
+        res.send(html);
+    });
+});
+
+// Inventory check (parameter: inventory_check) - Assuming stock column, but not in schema, so add to products.
+app.get('/inventory', requireLogin, (req, res) => {
+    const stock = req.query.stock || '1';
+    // Vulnerable: String
+    const sql = `SELECT * FROM products WHERE id = 1 AND stock = '${stock}'`; // Hacky
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        res.send('Inventory checked');
+    });
+});
+
+// Debug param (parameter: debug_param)
+app.get('/debug', requireLogin, (req, res) => {
+    const param = req.query.param || '';
+    // Vulnerable: Raw echo
+    const sql = param; // Direct execution
+    db.query(sql, (err, results) => {
+        if (err) res.send(err.message); // Error-based
+        else res.send(JSON.stringify(results));
+    });
+});
+
+app.listen(3000, () => console.log('App running on port 3000'));
