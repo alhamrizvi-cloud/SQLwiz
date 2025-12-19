@@ -1,7 +1,7 @@
 INSERT INTO users (username, password, role) VALUES
-('admin', ''' OR 1=1 --', 'admin'),
+('admin', ''' OR ''1''=''1', 'admin'),
 ('user1', '" OR "1"="1', 'user'),
-('user2', '-- OR #', 'user');
+('user2', ''' OR ''a''=''a', 'user');
 
 INSERT INTO products (name, category, price, description) VALUES
 ('Laptop', 'Electronics', 999.99, 'A powerful laptop'),
